@@ -1,0 +1,4 @@
+* TO DO
+- write tutorial for setting up account for rich presence
+There are some minor problems to correct:
+- Discord must be started before Quodlibet, including if restarting Discord
