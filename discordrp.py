@@ -9,103 +9,63 @@ import time
 from quodlibet import _
 from quodlibet import config, qltk, app
 from quodlibet.pattern import Pattern
-from quodlibet.plugins import PluginConfigMixin
+from quodlibet.plugins import PluginConfigMixin,PluginConfig
 from quodlibet.plugins.events import EventPlugin
 
 from gi.repository import GLib, Gio, Gtk
 
 from pypresence import Presence, PyPresenceException
 
+
+DEFAULT_CLIENTID = -1
+# DEFAULT_CID      = -1
+DEFAULT_TCURRENT = ""
+DEFAULT_BCURRENT = ""
+DEFAULT_TPATTERN = "<title>"
+DEFAULT_BPATTERN = "<artist><album| - <album>>"
+
+plugin_config = PluginConfig("discordrp")
+defaults = plugin_config.defaults
+defaults.set("clientid",DEFAULT_CLIENTID)
+# defaults.set("cid",DEFAULT_CID)
+defaults.set("topcurrent","")
+defaults.set("botcurrent","")
+defaults.set("toppattern",DEFAULT_TPATTERN)
+defaults.set("botpattern",DEFAULT_BPATTERN)
+# defaults.set("enabled",0)
+# defaults.set("error","disabled")
+    
+
 ## QUODLIBET PLUGIN INFO
 class DRPC(EventPlugin, PluginConfigMixin):
     PLUGIN_ID = "DiscordNowPlaying"
     PLUGIN_NAME = _("Discord Now Playing")
     REQUIRES_ACTION = True
-
-    DEFAULT_CLIENTID = ""
-    DEFAULT_CID      = -1
-    DEFAULT_TCURRENT = ""
-    DEFAULT_BCURRENT = ""
-    DEFAULT_TPATTERN = "<title>"
-    DEFAULT_BPATTERN = "<artist><album| - <album>>"
-
-    c_clientid = __name__ + '_clientid'
-    c_cid      = __name__ + '_cid'
-    c_tcurrent = __name__ + '_tcurrent'
-    c_bcurrent = __name__ + '_bcurrent'
-    c_tpattern = __name__ + '_tpattern'
-    c_bpattern = __name__ + '_bpattern'
-
-    c_enabled  = __name__ + '_enabled'
-
-    c_error    = __name__ + '.error'
-
-    # clientid = 0
-
+    
     def __init__(self):
-        # try:
-        #     self.clientid = config.get('plugins', self.c_clientid)
-        # except:
-        #     self.clientid = DEFAULT_CLIENTID
-        #     config.set('plugins', c_clientid, DEFAULT_CLIENTID)
+        print("initializing "+__name__)
 
-        print("initializing"+__name__)
+        self.__enabled = False
 
         self.song = None
         self.pause = "pause_gr"
         self.play = "play_gr"
         self.playing = self.pause
-        
-        try:
-            self._cid = config.get('plugins', self.c_cid)
-        except:
-            print("Error: "+_cid)
-            self._cid = self.DEFAULT_CID
-            config.set('plugins', self.c_cid, self._cid)
-        
-        try:
-            self.tpattern = config.get('plugins', self.c_tpattern)
-        except:
-            print("Error: "+tpattern)
-            self.tpattern = self.DEFAULT_TPATTERN
-            config.set('plugins', self.c_tpattern, self.tpattern)
 
-        try:
-            self.bpattern = config.get('plugins', self.c_bpattern)
-        except:
-            print("Error: "+bpattern)
-            self.bpattern = self.DEFAULT_BPATTERN
-            config.set('plugins', self.c_bpattern, self.bpattern)
-
-        try:
-            self._enabled = config.getint('plugins', self.c_enabled)
-        except:
-            print("Error: "+_enabled)
-            self._enabled = 0
-            config.set('plugins', self.c_enabled, self._enabled)
-            config.set('plugins', self.c_error, "not enabled")
-
-        # try:
-        #     self.tcurrent = int(config.get('plugins', self.c_tcurrent))
-        # except:
-        #     self.tcurrent = self.DEFAULT_TCURRENT
-        #     config.set('plugins', self.c_tcurrent, self.tcurrent)
-
-        # try:
-        #     self.bcurrent = int(config.get('plugins', self.c_bcurrent))
-        # except:
-        #     self.bcurrent = self.DEFAULT_BCURRENT
-        #     config.set('plugins', self.c_bcurrent, self.bcurrent)
-
-        if(self._enabled):
-            config.set('plugins', self.c_error, "enabled")
-            self.RPC = Presence(int(self._cid))
+        self._clientid = plugin_config.get("clientid") or DEFAULT_CLIENTID
+        self.tpattern = plugin_config.get("toppattern") or DEFAULT_TPATTERN
+        self.bpattern = plugin_config.get("botpattern") or DEFAULT_BPATTERN
+        self.tcurrent = plugin_config.get("topcurrent") or DEFAULT_TCURRENT
+        self.bcurrent = plugin_config.get("botcurrent") or DEFAULT_BCURRENT
+        if(self.__enabled):
+            plugin_config.set("error","enabled")
+            self.RPC = Presence(int(self._clientid))
             try:
                 self.RPC.connect()
                 print("RPC connected")
             except PyPresenceException:
-                self._cid = 0
-                config.set('plugins', self.c_cid, self._cid)
+                self._clientid = 0
+                plugin_config.set("clientid",self._clientid)
                 self.RPC = None
                 print("RPC not connected: PyPresenceException")
         else:
@@ -114,15 +74,14 @@ class DRPC(EventPlugin, PluginConfigMixin):
 
     def enabled(self):
         print("enabled")
-        self._enabled = 1
-        config.set('plugins', self.c_enabled, 1)
-        self.RPC = Presence(int(self._cid))
+        self.__enabled = True
+        self.RPC = Presence(int(self._clientid))
         try:
             self.RPC.connect()
             print("successfully enabled")
         except PyPresenceException:
-            self._cid = 0
-            config.set('plugins', self.c_cid, self._cid)
+            self._clientid = 0
+            plugin_config.set("clientid",self._clientid)
             self.RPC = None            
             print("unsuccessfully enabled: ppe")
         except:
@@ -130,34 +89,25 @@ class DRPC(EventPlugin, PluginConfigMixin):
             self.RPC = None          
             
     def disabled(self):
-        print("enabled")
-        self._enabled = 0
-        config.set('plugins', self.c_enabled, 0)
-        # try:
-        #     self.RPC.close()
-        # except PyPresenceException:
-        #     self.RPC = None
+        print("disabled")
+        self.__enabled = False
 
     def plugin_on_song_started(self, song):
-        # if song and self.RPC:
-        # self._enabled = config.get('plugins', self.c_enabled)
-        # config.set('plugins', self.c_error, self._enabled)
-        # config.set('plugins', self.c_error, "Update")
         print("on_song_started")
-        if self._enabled == 1 and song:
+        if self.__enabled and song:
             if not self.RPC:
                 print("song started, RPC null")
-                self.enabled()
+                self.__enabled()
             if self.RPC:
                 self.song = song
-                
-                self.tpattern = config.get('plugins', self.c_tpattern)
+    
+                self.tpattern = plugin_config.get("toppattern")
                 self.tcurrent = Pattern(self.tpattern) % song
-                config.set('plugins', self.c_tcurrent, self.tcurrent)
+                plugin_config.set("topcurrent",self.tcurrent)
                 
-                self.bpattern = config.get('plugins', self.c_bpattern)
+                self.bpattern = plugin_config.get("botpattern")
                 self.bcurrent = Pattern(self.bpattern) % song
-                config.set('plugins', self.c_bcurrent, self.bcurrent)
+                plugin_config.set("botcurrent",self.bcurrent)
                 
                 start = time.time()
                 end = float(Pattern("<~#length>") % song)
@@ -165,15 +115,17 @@ class DRPC(EventPlugin, PluginConfigMixin):
                 start = int(start)
                 end = int(end)
                 
-                print("enabled=="+str(self._enabled))
+                print("enabled=="+str(self.__enabled))
                 try:
                     self.RPC.update(state=self.bcurrent,
                                     details=self.tcurrent,
                                     large_image="main",
                                     small_image=self.playing)
                 except PyPresenceException:
-                    # config.set('plugins', self.c_error, "Cannot Update")
                     print("error, cannot update [start]")
+        else:
+            print("not enabled, nothing to send")
+           
             
         
     def plugin_on_paused(self):
@@ -207,7 +159,6 @@ class DRPC(EventPlugin, PluginConfigMixin):
                                 large_image="main",
                                 small_image=self.playing)
         except PyPresenceException:
-            # config.set('plugins', self.c_error, "Cannot Update")
             print("Cannot update: PyPresenceException")
         except:
             print("Cannot update")
@@ -227,17 +178,16 @@ class DRPC(EventPlugin, PluginConfigMixin):
         table.attach(lbl, 0, 1, 0, 1, xoptions=Gtk.AttachOptions.FILL)
 
         idbox = Gtk.Entry()
-        idtext = config.get('plugins', self.c_cid)
+        idtext = plugin_config.get("clientid")
         idbox.set_text(idtext)
         table.attach(idbox, 1, 3, 0, 1, xoptions=Gtk.AttachOptions.FILL)
         def _clientid_changed(entry):
-            self._cid = entry.get_text()
+            self._clientid = entry.get_text()
             try:
-                temp = int(self._cid)
-                config.set('plugins', self.c_cid, self._cid)
+                temp = int(self._clientid)
+                plugin_config.set("clientid",self._clientid)
             except ValueError:
-                # self._cid = self.DEFAULT_CID
-                config.set('plugins', self.c_cid, self.DEFAULT_CID)
+                plugin_config.set("clientid",DEFAULT_CLIENTID)
         idbox.connect('changed', _clientid_changed)
 
         lbl = Gtk.Label(label=_("Top Pattern"))
@@ -245,23 +195,23 @@ class DRPC(EventPlugin, PluginConfigMixin):
         table.attach(lbl, 0, 1, 1, 2, xoptions=Gtk.AttachOptions.FILL)
 
         tpbox = Gtk.Entry()
-        tpbox.set_text(config.get('plugins', self.c_tpattern))
+        tpbox.set_text(plugin_config.get("toppattern"))
         table.attach(tpbox, 1, 3, 1, 2, xoptions=Gtk.AttachOptions.FILL)
         def _tpattern_changed(entry):
             text = entry.get_text()
-            config.set('plugins', self.c_tpattern, text)
+            plugin_config.set("toppattern",text)
         tpbox.connect('changed', _tpattern_changed)
 
         lbl = Gtk.Label(label=_("Bottom Pattern"))
         lbl.set_alignment(xalign=1.0, yalign=0.5)
         table.attach(lbl, 0, 1, 2, 3, xoptions=Gtk.AttachOptions.FILL)\
 
-        bpbox = Gtk.Entry()     
-        bpbox.set_text(config.get('plugins', self.c_bpattern))
+        bpbox = Gtk.Entry()
+        bpbox.set_text(plugin_config.get("botpattern"))
         table.attach(bpbox, 1, 3, 2, 3, xoptions=Gtk.AttachOptions.FILL)
         def _bpattern_changed(entry):
             text = entry.get_text()
-            config.set('plugins', self.c_bpattern, text)
+            plugin_config.set("botpattern",text)
         bpbox.connect('changed', _bpattern_changed)
 
         vb.pack_start(table, True, True, 2)
