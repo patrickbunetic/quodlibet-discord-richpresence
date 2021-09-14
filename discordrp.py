@@ -18,7 +18,6 @@ from pypresence import Presence, PyPresenceException
 
 
 DEFAULT_CLIENTID = -1
-# DEFAULT_CID      = -1
 DEFAULT_TCURRENT = ""
 DEFAULT_BCURRENT = ""
 DEFAULT_TPATTERN = "<title>"
@@ -27,13 +26,10 @@ DEFAULT_BPATTERN = "<artist><album| - <album>>"
 plugin_config = PluginConfig("discordrp")
 defaults = plugin_config.defaults
 defaults.set("clientid",DEFAULT_CLIENTID)
-# defaults.set("cid",DEFAULT_CID)
 defaults.set("topcurrent","")
 defaults.set("botcurrent","")
 defaults.set("toppattern",DEFAULT_TPATTERN)
 defaults.set("botpattern",DEFAULT_BPATTERN)
-# defaults.set("enabled",0)
-# defaults.set("error","disabled")
     
 
 ## QUODLIBET PLUGIN INFO
@@ -57,55 +53,60 @@ class DRPC(EventPlugin, PluginConfigMixin):
         self.bpattern = plugin_config.get("botpattern") or DEFAULT_BPATTERN
         self.tcurrent = plugin_config.get("topcurrent") or DEFAULT_TCURRENT
         self.bcurrent = plugin_config.get("botcurrent") or DEFAULT_BCURRENT
+        self.RPC = None
         if(self.__enabled):
-            plugin_config.set("error","enabled")
+            self.connect_rpc()
+
+    def connect_rpc(self):
+        print("Attempting RPC connection")
+        if self.__enabled:
             self.RPC = Presence(int(self._clientid))
             try:
                 self.RPC.connect()
                 print("RPC connected")
             except PyPresenceException:
-                self._clientid = 0
-                plugin_config.set("clientid",self._clientid)
                 self.RPC = None
-                print("RPC not connected: PyPresenceException")
-        else:
-            self.RPC = None
-            print("RPC not connected: not enabled")
+                print("RPC not connected (PyPresenceException)")
+            except:
+                self.RPC = None
+                print("RPC not connected (General. Connection refused?)")
+
+    def disconnect_rpc(self):
+        print("Disconnecting RPC")
+        self.RPC.clear()
+        self.RPC.close()
+        self.RPC = None
 
     def enabled(self):
         print("enabled")
         self.__enabled = True
-        self.RPC = Presence(int(self._clientid))
-        try:
-            self.RPC.connect()
-            print("successfully enabled")
-        except PyPresenceException:
-            self._clientid = 0
-            plugin_config.set("clientid",self._clientid)
-            self.RPC = None            
-            print("unsuccessfully enabled: ppe")
-        except:
-            print("unsuccessfully enabled: other")
-            self.RPC = None          
+        self.connect_rpc()
+            
             
     def disabled(self):
         print("disabled")
         self.__enabled = False
+        if self.RPC:
+            # self.RPC.clear()
+            self.RPC.close()
+        self.RPC = None
 
     def plugin_on_song_started(self, song):
-        print("on_song_started")
+        # print("on_song_started")
         if self.__enabled and song:
             if not self.RPC:
                 print("song started, RPC null")
-                self.__enabled()
+                # self.enabled()
+                self.connect_rpc()
             if self.RPC:
                 self.song = song
-    
+
+                # Get patterns again in case they have changed since last update
                 self.tpattern = plugin_config.get("toppattern")
+                self.bpattern = plugin_config.get("botpattern")
+                
                 self.tcurrent = Pattern(self.tpattern) % song
                 plugin_config.set("topcurrent",self.tcurrent)
-                
-                self.bpattern = plugin_config.get("botpattern")
                 self.bcurrent = Pattern(self.bpattern) % song
                 plugin_config.set("botcurrent",self.bcurrent)
                 
@@ -122,29 +123,34 @@ class DRPC(EventPlugin, PluginConfigMixin):
                                     large_image="main",
                                     small_image=self.playing)
                 except PyPresenceException:
-                    print("error, cannot update [start]")
-        else:
-            print("not enabled, nothing to send")
+                    print("Cannot update: PyPresenceException [paused]")
+                    self.disconnect_rpc()
            
             
         
     def plugin_on_paused(self):
-        print("on_paused")
+        # print("on_paused")
         self.playing = self.pause
-        
+        if self.__enabled and self.song:
+            if not self.RPC:
+                print("song paused, RPC null")
+                self.connect_rpc()
         try:
-            if self.RPC:
-                self.RPC.update(state=self.bcurrent,
-                                details=self.tcurrent,
-                                large_image="main",
-                                small_image=self.playing)
+            self.RPC.update(state=self.bcurrent,
+                            details=self.tcurrent,
+                            large_image="main",
+                            small_image=self.playing)
         except PyPresenceException:
-            print("error, cannot update [pause]")
+            print("Cannot update: PyPresenceException [paused]")
+            self.disconnect_rpc()
 
-    def plugin_on_unpaused(self):
-        
-        print("on_unpaused")
+    def plugin_on_unpaused(self): 
+        # print("on_unpaused")
         self.playing = self.play
+        if self.__enabled and self.song:
+            if not self.RPC:
+                print("song unpaused, RPC null")
+                self.connect_rpc()
 
         # start = time.time()
         # end = float(Pattern("<~#length>") % self.song)
@@ -153,13 +159,13 @@ class DRPC(EventPlugin, PluginConfigMixin):
         # end = int(end)
         
         try:
-            if self.RPC:
-                self.RPC.update(state=self.bcurrent,
-                                details=self.tcurrent,
-                                large_image="main",
-                                small_image=self.playing)
+            self.RPC.update(state=self.bcurrent,
+                            details=self.tcurrent,
+                            large_image="main",
+                            small_image=self.playing)
         except PyPresenceException:
-            print("Cannot update: PyPresenceException")
+            print("Cannot update: PyPresenceException [unpaused]")
+            self.disconnect_rpc()
         except:
             print("Cannot update")
             
