@@ -1,4 +1,4 @@
 * TO DO
 - write tutorial for setting up account for rich presence
 There are some minor problems to correct:
-- Discord must be started before Quodlibet, including if restarting Discord
+- If Discord is started after Quod Libet, rich presence may not update right away. It should on the next song play/pause
