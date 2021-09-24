@@ -39,7 +39,7 @@ class DRPC(EventPlugin, PluginConfigMixin):
     REQUIRES_ACTION = True
     
     def __init__(self):
-        print("initializing "+__name__)
+        myprint("initializing "+__name__)
 
         self.__enabled = False
 
@@ -58,33 +58,33 @@ class DRPC(EventPlugin, PluginConfigMixin):
             self.connect_rpc()
 
     def connect_rpc(self):
-        print("Attempting RPC connection")
+        myprint("Attempting RPC connection")
         if self.__enabled:
             self.RPC = Presence(int(self._clientid))
             try:
                 self.RPC.connect()
-                print("RPC connected")
+                myprint("RPC connected")
             except PyPresenceException:
                 self.RPC = None
-                print("RPC not connected (PyPresenceException)")
+                myprint("RPC not connected (PyPresenceException)")
             except:
                 self.RPC = None
-                print("RPC not connected (General. Connection refused?)")
+                myprint("RPC not connected (General. Connection refused?)")
 
     def disconnect_rpc(self):
-        print("Disconnecting RPC")
-        self.RPC.clear()
+        myprint("Disconnecting RPC")
+        # self.RPC.clear()
         self.RPC.close()
         self.RPC = None
 
     def enabled(self):
-        print("enabled")
+        myprint("enabled")
         self.__enabled = True
         self.connect_rpc()
             
             
     def disabled(self):
-        print("disabled")
+        myprint("disabled")
         self.__enabled = False
         if self.RPC:
             # self.RPC.clear()
@@ -92,82 +92,87 @@ class DRPC(EventPlugin, PluginConfigMixin):
         self.RPC = None
 
     def plugin_on_song_started(self, song):
-        # print("on_song_started")
+        myprint("on_song_started")
         if self.__enabled and song:
+            self.song = song
+            self.playing = self.play
+            if self.__enabled and self.song:
+                if not self.RPC:
+                    self.connect_rpc()
+                if self.RPC:
+            
+                    # Get patterns again in case they have changed since last update
+                    self.tpattern = plugin_config.get("toppattern")
+                    self.bpattern = plugin_config.get("botpattern")
+                    
+                    self.tcurrent = Pattern(self.tpattern) % song
+                    plugin_config.set("topcurrent",self.tcurrent)
+                    self.bcurrent = Pattern(self.bpattern) % song
+                    plugin_config.set("botcurrent",self.bcurrent)
+                
+                    start = time.time()
+                    end = float(Pattern("<~#length>") % song)
+                    end = end + start
+                    start = int(start)
+                    end = int(end)
+                
+                    myprint("enabled=="+str(self.__enabled))
+                    try:
+                        self.RPC.update(state=self.bcurrent,
+                                        details=self.tcurrent,
+                                        large_image="main",
+                                        small_image=self.playing)
+                    except PyPresenceException:
+                        myprint("Cannot update: PyPresenceException [started]")
+                        self.disconnect_rpc()
+                    except:
+                        myprint("Cannot update [started]")
+                        self.disconnect_rpc()
+           
+            
+        
+    def plugin_on_paused(self):
+        myprint("on_paused")
+        self.playing = self.pause
+        if self.__enabled and self.song:
             if not self.RPC:
-                print("song started, RPC null")
-                # self.enabled()
                 self.connect_rpc()
             if self.RPC:
-                self.song = song
-
-                # Get patterns again in case they have changed since last update
-                self.tpattern = plugin_config.get("toppattern")
-                self.bpattern = plugin_config.get("botpattern")
-                
-                self.tcurrent = Pattern(self.tpattern) % song
-                plugin_config.set("topcurrent",self.tcurrent)
-                self.bcurrent = Pattern(self.bpattern) % song
-                plugin_config.set("botcurrent",self.bcurrent)
-                
-                start = time.time()
-                end = float(Pattern("<~#length>") % song)
-                end = end + start
-                start = int(start)
-                end = int(end)
-                
-                print("enabled=="+str(self.__enabled))
                 try:
                     self.RPC.update(state=self.bcurrent,
                                     details=self.tcurrent,
                                     large_image="main",
                                     small_image=self.playing)
                 except PyPresenceException:
-                    print("Cannot update: PyPresenceException [paused]")
+                    myprint("Cannot update: PyPresenceException [paused]")
                     self.disconnect_rpc()
-           
-            
-        
-    def plugin_on_paused(self):
-        # print("on_paused")
-        self.playing = self.pause
-        if self.__enabled and self.song:
-            if not self.RPC:
-                print("song paused, RPC null")
-                self.connect_rpc()
-        try:
-            self.RPC.update(state=self.bcurrent,
-                            details=self.tcurrent,
-                            large_image="main",
-                            small_image=self.playing)
-        except PyPresenceException:
-            print("Cannot update: PyPresenceException [paused]")
-            self.disconnect_rpc()
+                except:
+                    myprint("Cannot update [paused]")
+                    self.disconnect_rpc()
 
     def plugin_on_unpaused(self): 
-        # print("on_unpaused")
+        myprint("on_unpaused")
         self.playing = self.play
         if self.__enabled and self.song:
             if not self.RPC:
-                print("song unpaused, RPC null")
                 self.connect_rpc()
-
-        # start = time.time()
-        # end = float(Pattern("<~#length>") % self.song)
-        # end = end + start
-        # start = int(start)
-        # end = int(end)
-        
-        try:
-            self.RPC.update(state=self.bcurrent,
-                            details=self.tcurrent,
-                            large_image="main",
-                            small_image=self.playing)
-        except PyPresenceException:
-            print("Cannot update: PyPresenceException [unpaused]")
-            self.disconnect_rpc()
-        except:
-            print("Cannot update")
+            if self.RPC:
+                # start = time.time()
+                # end = float(Pattern("<~#length>") % self.song)
+                # end = end + start
+                # start = int(start)
+                # end = int(end)
+                try:
+                    self.RPC.update(state=self.bcurrent,
+                                    details=self.tcurrent,
+                                    large_image="main",
+                                    small_image=self.playing)
+                except PyPresenceException:
+                    myprint("Cannot update: PyPresenceException [unpaused]")
+                    self.disconnect_rpc()
+                except:
+                    myprint("Cannot update [unpaused]")
+                    self.disconnect_rpc()
             
     @classmethod
     def PluginPreferences(self, window):
@@ -222,3 +227,9 @@ class DRPC(EventPlugin, PluginConfigMixin):
 
         vb.pack_start(table, True, True, 2)
         return vb
+
+
+    
+
+def myprint(string):
+    print("::DiscordRP:: "+string)
